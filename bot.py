@@ -689,32 +689,23 @@ async def main():
 
     await create_indexes()
 
-    print(
-        "MongoDB indexes ready."
-    )
-
-    await app.start()
-
-    print(
-        "Telegram bot started."
-    )
+    print("MongoDB indexes ready.")
 
     threading.Thread(
         target=run_web,
         daemon=True
     ).start()
 
-    print(
-        "Web server started."
-    )
+    print("Web server started.")
+
+    await app.start()
+
+    print("Telegram bot started.")
 
     await idle()
 
-    await app.stop()
-
-
 if __name__ == "__main__":
 
-    asyncio.run(
+    app.run(
         main()
     )
