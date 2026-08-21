@@ -128,6 +128,8 @@ async def prefix_search(
 # INDEX CHECKPOINT
 # =====================================================
 
+index_state = db.index_state
+
 async def get_index_state():
 
     data = await index_state.find_one(
