@@ -43,7 +43,8 @@ from database import (
 )
 
 from indexer import (
-    register_indexer
+    register_indexer,
+    index_existing_channel
 )
 
 from search import (
@@ -679,6 +680,106 @@ async def stats(
 register_indexer(
     app
 )
+
+# =====================================================
+# INDEX EXISTING DATABASE
+# =====================================================
+
+INDEX_RUNNING = False
+
+
+@app.on_message(
+    filters.private
+    & filters.user(OWNER_ID)
+    & filters.command("index")
+)
+async def index_command(
+    _,
+    message
+):
+
+    global INDEX_RUNNING
+
+    if INDEX_RUNNING:
+
+        await message.reply_text(
+            "⚠️ <b>Indexing is already running.</b>\n\n"
+            "Please wait for it to finish."
+        )
+
+        return
+
+    INDEX_RUNNING = True
+
+    status = await message.reply_text(
+
+        "📚 <b>Database indexing started...</b>\n\n"
+
+        "This will scan your private database channel.\n\n"
+
+        "⏳ Please wait..."
+    )
+
+    async def update_status(text):
+
+        try:
+
+            await status.edit_text(
+                text
+            )
+
+        except Exception as e:
+
+            print(
+                "[STATUS UPDATE ERROR]",
+                repr(e)
+            )
+
+    try:
+
+        result = await index_existing_channel(
+
+            app,
+
+            status_callback=update_status
+        )
+
+        if result:
+
+            await update_status(
+
+                "✅ <b>Indexing completed!</b>\n\n"
+
+                f"📦 Processed: "
+                f"{result['processed']:,}\n"
+
+                f"💾 Indexed: "
+                f"{result['indexed']:,}\n"
+
+                f"⏭ Skipped: "
+                f"{result['skipped']:,}"
+            )
+
+    except Exception as e:
+
+        print(
+            "[INDEX COMMAND ERROR]",
+            repr(e)
+        )
+
+        await update_status(
+
+            "❌ <b>Indexing failed.</b>\n\n"
+
+            f"<code>{e}</code>\n\n"
+
+            "Run <code>/index</code> again "
+            "to continue from the saved checkpoint."
+        )
+
+    finally:
+
+        INDEX_RUNNING = False
 
 
 # =====================================================
