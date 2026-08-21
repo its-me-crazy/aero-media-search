@@ -11,6 +11,7 @@ mongo = AsyncIOMotorClient(
 db = mongo[DB_NAME]
 
 files = db.files
+index_state = db.index_state
 
 
 async def create_indexes():
@@ -77,7 +78,10 @@ async def count_files():
     return await files.count_documents({})
 
 
-async def exact_search(title_key, limit):
+async def exact_search(
+    title_key,
+    limit
+):
 
     cursor = (
         files
@@ -96,7 +100,10 @@ async def exact_search(title_key, limit):
     )
 
 
-async def prefix_search(title_key, limit):
+async def prefix_search(
+    title_key,
+    limit
+):
 
     cursor = (
         files
@@ -114,4 +121,86 @@ async def prefix_search(title_key, limit):
 
     return await cursor.to_list(
         length=limit
+    )
+
+
+# =====================================================
+# INDEX CHECKPOINT
+# =====================================================
+
+async def get_index_state():
+
+    data = await index_state.find_one(
+        {
+            "_id": "database_channel"
+        }
+    )
+
+    if not data:
+        return {
+            "last_message_id": 0,
+            "processed": 0,
+            "indexed": 0,
+            "skipped": 0
+        }
+
+    return data
+
+
+async def update_index_state(
+    last_message_id,
+    processed=None,
+    indexed=None,
+    skipped=None,
+    running=None,
+    completed=None
+):
+
+    update = {
+        "last_message_id": last_message_id
+    }
+
+    if processed is not None:
+        update["processed"] = processed
+
+    if indexed is not None:
+        update["indexed"] = indexed
+
+    if skipped is not None:
+        update["skipped"] = skipped
+
+    if running is not None:
+        update["running"] = running
+
+    if completed is not None:
+        update["completed"] = completed
+
+    await index_state.update_one(
+        {
+            "_id": "database_channel"
+        },
+        {
+            "$set": update
+        },
+        upsert=True
+    )
+
+
+async def reset_index_state():
+
+    await index_state.update_one(
+        {
+            "_id": "database_channel"
+        },
+        {
+            "$set": {
+                "last_message_id": 0,
+                "processed": 0,
+                "indexed": 0,
+                "skipped": 0,
+                "running": False,
+                "completed": False
+            }
+        },
+        upsert=True
     )
