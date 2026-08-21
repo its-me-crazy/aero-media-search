@@ -305,14 +305,9 @@ def register_indexer(app):
 
     @app.on_message(
         filters.channel
-        & filters.chat(
-            DATABASE_CHANNEL_ID
-        )
+        & filters.chat(DATABASE_CHANNEL_ID)
     )
-    async def database_listener(
-        _,
-        message
-    ):
+    async def database_listener(_, message):
 
         try:
 
@@ -328,4 +323,4 @@ def register_indexer(app):
             print(
                 "[NEW FILE INDEX ERROR]",
                 repr(e)
-    )
+            )
