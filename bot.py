@@ -84,7 +84,10 @@ def health():
 
 def run_web():
 
-    web.run(
+    from waitress import serve
+
+    serve(
+        web,
         host="0.0.0.0",
         port=PORT
     )
@@ -696,20 +699,21 @@ async def main():
         "Telegram bot started."
     )
 
+    threading.Thread(
+        target=run_web,
+        daemon=True
+    ).start()
+
+    print(
+        "Web server started."
+    )
+
     await idle()
 
     await app.stop()
 
 
 if __name__ == "__main__":
-
-    threading.Thread(
-
-        target=run_web,
-
-        daemon=True
-
-    ).start()
 
     asyncio.run(
         main()
