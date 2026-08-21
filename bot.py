@@ -6,8 +6,7 @@ from flask import Flask
 
 from pyrogram import (
     Client,
-    filters,
-    idle
+    filters
 )
 
 from pyrogram.types import (
@@ -796,7 +795,7 @@ async def main():
 
     print("MongoDB indexes ready.")
 
-    # Start Flask/Waitress web server
+    # Start web server
     threading.Thread(
         target=run_web,
         daemon=True
@@ -804,30 +803,15 @@ async def main():
 
     print("Web server started.")
 
-    try:
+    # Start Telegram bot
+    await app.start()
 
-        # Start Telegram bot
-        await app.start()
+    print("Telegram bot started.")
 
-        print("Telegram bot started.")
-
-        # Keep bot running
-        await idle()
-
-    finally:
-
-        # Stop Pyrogram on THE SAME asyncio loop
-        if app.is_connected:
-
-            print("Stopping Telegram bot...")
-
-            await app.stop()
-
-            print("Telegram bot stopped.")
+    # Keep the process alive
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
 
-    asyncio.run(
-        main()
-    )
+    asyncio.run(main())
