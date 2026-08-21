@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: aero-media-search-bot
+    runtime: docker
+
+    dockerfilePath: ./Dockerfile
+
+    healthCheckPath: /health
+
+    envVars:
+
+      - key: BOT_TOKEN
+        sync: false
+
+      - key: API_ID
+        sync: false
+
+      - key: API_HASH
+        sync: false
+
+      - key: MONGO_URI
+        sync: false
+
+      - key: DB_NAME
+        value: aero_media_search
+
+      - key: DATABASE_CHANNEL_ID
+        sync: false
+
+      - key: OWNER_ID
+        sync: false
+
+      - key: BOT_USERNAME
+        sync: false
+
+      - key: UPDATES_USERNAME
+        value: Aero_Unity
+
+      - key: DELETE_AFTER
+        value: "300"
+
+      - key: RESULTS_PER_PAGE
+        value: "10"
+
+      - key: MAX_RESULTS
+        value: "50"
+
+      - key: PORT
+        value: "10000"
