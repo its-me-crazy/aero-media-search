@@ -5,7 +5,6 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Install compiler required by TgCrypto
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        gcc \
