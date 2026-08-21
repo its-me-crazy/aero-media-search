@@ -3,6 +3,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from config import MONGO_URI, DB_NAME
 
 
+# =====================================================
+# MONGODB
+# =====================================================
+
 mongo = AsyncIOMotorClient(
     MONGO_URI,
     serverSelectionTimeoutMS=10000
@@ -14,13 +18,19 @@ files = db.files
 index_state = db.index_state
 
 
+# =====================================================
+# CREATE INDEXES
+# =====================================================
+
 async def create_indexes():
 
+    # Search index
     await files.create_index(
         [("title_key", 1)],
         name="title_key"
     )
 
+    # Title + year
     await files.create_index(
         [
             ("title_key", 1),
@@ -29,6 +39,7 @@ async def create_indexes():
         name="title_year"
     )
 
+    # Title + language
     await files.create_index(
         [
             ("title_key", 1),
@@ -37,6 +48,7 @@ async def create_indexes():
         name="title_language"
     )
 
+    # Prevent duplicate Telegram messages
     await files.create_index(
         [
             ("chat_id", 1),
@@ -46,37 +58,61 @@ async def create_indexes():
         name="telegram_message_unique"
     )
 
+    # Newest files
     await files.create_index(
         [("created_at", -1)],
         name="created_at"
     )
 
+    print("MongoDB indexes ready.")
+
+
+# =====================================================
+# SAVE FILE
+# =====================================================
 
 async def save_file(data):
 
     await files.update_one(
+
         {
             "chat_id": data["chat_id"],
             "message_id": data["message_id"]
         },
+
         {
             "$set": data
         },
+
         upsert=True
     )
 
 
+# =====================================================
+# GET FILE
+# =====================================================
+
 async def get_file(file_id):
 
     return await files.find_one(
-        {"_id": file_id}
+        {
+            "_id": file_id
+        }
     )
 
+
+# =====================================================
+# COUNT FILES
+# =====================================================
 
 async def count_files():
 
     return await files.count_documents({})
 
+
+# =====================================================
+# EXACT SEARCH
+# =====================================================
 
 async def exact_search(
     title_key,
@@ -84,14 +120,22 @@ async def exact_search(
 ):
 
     cursor = (
+
         files
-        .find({
-            "title_key": title_key
-        })
-        .sort([
-            ("year", 1),
-            ("message_id", 1)
-        ])
+
+        .find(
+            {
+                "title_key": title_key
+            }
+        )
+
+        .sort(
+            [
+                ("year", 1),
+                ("message_id", 1)
+            ]
+        )
+
         .limit(limit)
     )
 
@@ -100,22 +144,34 @@ async def exact_search(
     )
 
 
+# =====================================================
+# PREFIX SEARCH
+# =====================================================
+
 async def prefix_search(
     title_key,
     limit
 ):
 
     cursor = (
+
         files
-        .find({
-            "title_key": {
-                "$regex": "^" + title_key
+
+        .find(
+            {
+                "title_key": {
+                    "$regex": "^" + title_key
+                }
             }
-        })
-        .sort([
-            ("title_key", 1),
-            ("year", 1)
-        ])
+        )
+
+        .sort(
+            [
+                ("title_key", 1),
+                ("year", 1)
+            ]
+        )
+
         .limit(limit)
     )
 
@@ -128,8 +184,6 @@ async def prefix_search(
 # INDEX CHECKPOINT
 # =====================================================
 
-index_state = db.index_state
-
 async def get_index_state():
 
     data = await index_state.find_one(
@@ -139,15 +193,28 @@ async def get_index_state():
     )
 
     if not data:
+
         return {
+
             "last_message_id": 0,
+
             "processed": 0,
+
             "indexed": 0,
-            "skipped": 0
+
+            "skipped": 0,
+
+            "running": False,
+
+            "completed": False
         }
 
     return data
 
+
+# =====================================================
+# UPDATE INDEX CHECKPOINT
+# =====================================================
 
 async def update_index_state(
     last_message_id,
@@ -159,50 +226,73 @@ async def update_index_state(
 ):
 
     update = {
-        "last_message_id": last_message_id
+
+        "last_message_id":
+            last_message_id
     }
 
     if processed is not None:
+
         update["processed"] = processed
 
     if indexed is not None:
+
         update["indexed"] = indexed
 
     if skipped is not None:
+
         update["skipped"] = skipped
 
     if running is not None:
+
         update["running"] = running
 
     if completed is not None:
+
         update["completed"] = completed
 
     await index_state.update_one(
+
         {
             "_id": "database_channel"
         },
+
         {
             "$set": update
         },
+
         upsert=True
     )
 
 
+# =====================================================
+# RESET INDEX
+# =====================================================
+
 async def reset_index_state():
 
     await index_state.update_one(
+
         {
             "_id": "database_channel"
         },
+
         {
             "$set": {
+
                 "last_message_id": 0,
+
                 "processed": 0,
+
                 "indexed": 0,
+
                 "skipped": 0,
+
                 "running": False,
+
                 "completed": False
             }
         },
+
         upsert=True
     )
