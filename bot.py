@@ -796,6 +796,7 @@ async def main():
 
     print("MongoDB indexes ready.")
 
+    # Start Flask/Waitress web server
     threading.Thread(
         target=run_web,
         daemon=True
@@ -803,14 +804,30 @@ async def main():
 
     print("Web server started.")
 
-    await app.start()
+    try:
 
-    print("Telegram bot started.")
+        # Start Telegram bot
+        await app.start()
 
-    await idle()
+        print("Telegram bot started.")
+
+        # Keep bot running
+        await idle()
+
+    finally:
+
+        # Stop Pyrogram on THE SAME asyncio loop
+        if app.is_connected:
+
+            print("Stopping Telegram bot...")
+
+            await app.stop()
+
+            print("Telegram bot stopped.")
+
 
 if __name__ == "__main__":
 
-    app.run(
+    asyncio.run(
         main()
     )
