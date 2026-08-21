@@ -275,7 +275,11 @@ async def group_search(
     filters.private
     & filters.text
     & ~filters.command(
-        ["start"]
+        [
+            "start",
+            "index",
+            "stats"
+        ]
     )
 )
 async def private_search(
