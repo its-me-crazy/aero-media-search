@@ -98,14 +98,11 @@ def run_web():
 app = Client(
 
     "aero_media_search",
-
     api_id=API_ID,
-
     api_hash=API_HASH,
-
     bot_token=BOT_TOKEN,
-
-    in_memory=True
+    in_memory=True,
+    workers=4
 )
 
 # =====================================================
@@ -809,6 +806,27 @@ async def index_command(
         INDEX_RUNNING = False
 
 
+@app.on_message()
+async def debug_all_messages(_, message):
+    print(
+        "========== TELEGRAM UPDATE =========="
+    )
+    print(
+        "Chat ID:",
+        message.chat.id if message.chat else None
+    )
+    print(
+        "User:",
+        message.from_user.id if message.from_user else None
+    )
+    print(
+        "Text:",
+        message.text
+    )
+    print(
+        "======================================"
+    )
+    
 # =====================================================
 # MAIN
 # =====================================================
