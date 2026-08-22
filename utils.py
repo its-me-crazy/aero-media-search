@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 # =====================================================
-# LANGUAGE PATTERNS
+# LANGUAGE DETECTION
 # =====================================================
 
 LANGUAGE_PATTERNS = {
@@ -37,64 +37,27 @@ LANGUAGE_PATTERNS = {
     "Kannada": [
         r"\bkannada\b",
         r"\bkan\b"
+    ],
+
+    "Bengali": [
+        r"\bbengali\b",
+        r"\bben\b"
+    ],
+
+    "Marathi": [
+        r"\bmarathi\b",
+        r"\bmar\b"
+    ],
+
+    "Punjabi": [
+        r"\bpunjabi\b",
+        r"\bpun\b"
     ]
 }
 
 
 # =====================================================
-# NOISE PATTERNS
-# =====================================================
-
-QUALITY_PATTERN = (
-    r"\b("
-    r"480p|576p|720p|1080p|1440p|2160p|"
-    r"4k|8k"
-    r")\b"
-)
-
-RELEASE_PATTERN = (
-    r"\b("
-    r"web[- ]?dl|web[- ]?rip|"
-    r"bluray|blu[- ]?ray|"
-    r"brrip|hdrip|hdtv|dvdrip|"
-    r"camrip|webrip"
-    r")\b"
-)
-
-CODEC_PATTERN = (
-    r"\b("
-    r"x264|x265|h264|h265|"
-    r"hevc|av1|avc"
-    r")\b"
-)
-
-AUDIO_PATTERN = (
-    r"\b("
-    r"5\.1|7\.1|"
-    r"aac|aac2\.0|"
-    r"dd|ddp|"
-    r"ac3|eac3|"
-    r"atmos|"
-    r"mp3|flac"
-    r")\b"
-)
-
-SOURCE_PATTERN = (
-    r"\b("
-    r"amzn|amazon|"
-    r"netflix|"
-    r"nf|"
-    r"prime|"
-    r"hotstar|"
-    r"zee5|"
-    r"sonyliv|"
-    r"jio"
-    r")\b"
-)
-
-
-# =====================================================
-# NORMALIZE TEXT
+# NORMALIZATION
 # =====================================================
 
 def normalize_text(text):
@@ -112,22 +75,13 @@ def normalize_text(text):
     text = text.lower()
 
     # Replace separators
-    text = text.replace(
-        "_",
-        " "
+    text = re.sub(
+        r"[_\-.]+",
+        " ",
+        text
     )
 
-    text = text.replace(
-        ".",
-        " "
-    )
-
-    text = text.replace(
-        "-",
-        " "
-    )
-
-    # Remove brackets and their contents
+    # Remove bracketed information
     text = re.sub(
         r"\[[^\]]*\]",
         " ",
@@ -148,22 +102,24 @@ def normalize_text(text):
 
     # Quality
     text = re.sub(
-        QUALITY_PATTERN,
+        r"\b("
+        r"480p|576p|720p|1080p|1440p|2160p|"
+        r"4k|8k"
+        r")\b",
         " ",
         text,
         flags=re.I
     )
 
-    # Release/source tags
+    # Release tags
     text = re.sub(
-        RELEASE_PATTERN,
-        " ",
-        text,
-        flags=re.I
-    )
-
-    text = re.sub(
-        SOURCE_PATTERN,
+        r"\b("
+        r"web[- ]?dl|web[- ]?rip|webrip|"
+        r"bluray|blu[- ]?ray|brrip|"
+        r"hdrip|hdtv|dvdrip|"
+        r"camrip|cam|ts|telesync|"
+        r"proper|repack"
+        r")\b",
         " ",
         text,
         flags=re.I
@@ -171,7 +127,9 @@ def normalize_text(text):
 
     # Codec
     text = re.sub(
-        CODEC_PATTERN,
+        r"\b("
+        r"x264|x265|h264|h265|hevc|av1"
+        r")\b",
         " ",
         text,
         flags=re.I
@@ -179,32 +137,29 @@ def normalize_text(text):
 
     # Audio
     text = re.sub(
-        AUDIO_PATTERN,
-        " ",
-        text,
-        flags=re.I
-    )
-
-    # Common release tags
-    text = re.sub(
         r"\b("
-        r"proper|repack|extended|"
-        r"remastered|uncut|"
-        r"complete|dual|multi|"
-        r"dubbed|dub"
+        r"5\.1|7\.1|aac|ac3|dd|ddp|"
+        r"ddp2\.0|ddp5\.1|ddp7\.1|"
+        r"atmos|dts|truehd"
         r")\b",
         " ",
         text,
         flags=re.I
     )
 
-    # Normalize apostrophes
-    text = text.replace(
-        "'",
-        ""
+    # Common source tags
+    text = re.sub(
+        r"\b("
+        r"nf|amzn|amazon|netflix|"
+        r"dsnp|disney|hulu|"
+        r"yts|rarbg"
+        r")\b",
+        " ",
+        text,
+        flags=re.I
     )
 
-    # Keep letters/numbers/spaces
+    # Keep alphanumeric characters and spaces
     text = re.sub(
         r"[^\w\s]",
         " ",
@@ -212,7 +167,7 @@ def normalize_text(text):
         flags=re.UNICODE
     )
 
-    # Collapse spaces
+    # Multiple spaces
     text = re.sub(
         r"\s+",
         " ",
@@ -222,55 +177,13 @@ def normalize_text(text):
     return text.strip()
 
 
-# =====================================================
-# TITLE KEY
-# =====================================================
-
 def title_key(text):
 
-    return normalize_text(
-        text
-    )
+    return normalize_text(text)
 
 
 # =====================================================
-# TITLE TOKENS
-# =====================================================
-
-def title_tokens(text):
-
-    key = title_key(
-        text
-    )
-
-    if not key:
-        return []
-
-    tokens = key.split()
-
-    # Remove very common filename words
-    ignored = {
-        "the",
-        "a",
-        "an"
-    }
-
-    result = []
-
-    for token in tokens:
-
-        if (
-            token
-            and token not in ignored
-            and token not in result
-        ):
-            result.append(token)
-
-    return result
-
-
-# =====================================================
-# EXTRACT YEAR
+# YEAR
 # =====================================================
 
 def extract_year(text):
@@ -278,22 +191,21 @@ def extract_year(text):
     if not text:
         return None
 
-    matches = re.findall(
+    match = re.search(
         r"\b(19\d{2}|20\d{2})\b",
-        text
+        str(text)
     )
 
-    if not matches:
-        return None
+    if match:
+        return int(
+            match.group(1)
+        )
 
-    # Usually the last year is the release year.
-    return int(
-        matches[-1]
-    )
+    return None
 
 
 # =====================================================
-# DETECT LANGUAGE
+# LANGUAGE
 # =====================================================
 
 def detect_language(text):
@@ -301,7 +213,7 @@ def detect_language(text):
     if not text:
         return "Unknown"
 
-    lower = text.lower()
+    lower = str(text).lower()
 
     for language, patterns in LANGUAGE_PATTERNS.items():
 
@@ -317,7 +229,7 @@ def detect_language(text):
 
 
 # =====================================================
-# EXTRACT QUALITY
+# QUALITY
 # =====================================================
 
 def extract_quality(text):
@@ -326,28 +238,22 @@ def extract_quality(text):
         return "Unknown"
 
     match = re.search(
-        QUALITY_PATTERN,
-        text,
+        r"\b("
+        r"480p|576p|720p|1080p|1440p|2160p|"
+        r"4k|8k"
+        r")\b",
+        str(text),
         flags=re.I
     )
 
     if match:
-
-        quality = match.group(1)
-
-        if quality.lower() == "4k":
-            return "4K"
-
-        if quality.lower() == "8k":
-            return "8K"
-
-        return quality
+        return match.group(1)
 
     return "Unknown"
 
 
 # =====================================================
-# GET FILENAME
+# FILENAME
 # =====================================================
 
 def get_filename(message):
@@ -384,7 +290,7 @@ def get_filename(message):
 
 
 # =====================================================
-# EXTRACT TITLE
+# TITLE EXTRACTION
 # =====================================================
 
 def extract_title(filename):
@@ -393,10 +299,82 @@ def extract_title(filename):
         return ""
 
     name = Path(
-        filename
+        str(filename)
     ).stem
 
-    # Remove bracketed release information
+    # Remove quality
+    name = re.sub(
+        r"\b("
+        r"480p|576p|720p|1080p|1440p|2160p|"
+        r"4k|8k"
+        r")\b",
+        " ",
+        name,
+        flags=re.I
+    )
+
+    # Remove release/source tags
+    name = re.sub(
+        r"\b("
+        r"web[- ]?dl|web[- ]?rip|webrip|"
+        r"bluray|blu[- ]?ray|brrip|hdrip|"
+        r"hdtv|dvdrip|camrip|cam|"
+        r"proper|repack"
+        r")\b",
+        " ",
+        name,
+        flags=re.I
+    )
+
+    # Remove codecs
+    name = re.sub(
+        r"\b("
+        r"x264|x265|h264|h265|hevc|av1"
+        r")\b",
+        " ",
+        name,
+        flags=re.I
+    )
+
+    # Remove audio tags
+    name = re.sub(
+        r"\b("
+        r"5\.1|7\.1|aac|ac3|dd|ddp|"
+        r"atmos|dts|truehd"
+        r")\b",
+        " ",
+        name,
+        flags=re.I
+    )
+
+    # Remove languages
+    for patterns in LANGUAGE_PATTERNS.values():
+
+        for pattern in patterns:
+
+            name = re.sub(
+                pattern,
+                " ",
+                name,
+                flags=re.I
+            )
+
+    # Remove trailing year
+    name = re.sub(
+        r"[\s._-]+"
+        r"(19\d{2}|20\d{2})"
+        r"[\s._-]*$",
+        "",
+        name
+    )
+
+    # Replace separators
+    name = re.sub(
+        r"[._\-]+",
+        " ",
+        name
+    )
+
     name = re.sub(
         r"\[[^\]]*\]",
         " ",
@@ -409,89 +387,6 @@ def extract_title(filename):
         name
     )
 
-    name = re.sub(
-        r"\{[^}]*\}",
-        " ",
-        name
-    )
-
-    # Quality
-    name = re.sub(
-        QUALITY_PATTERN,
-        " ",
-        name,
-        flags=re.I
-    )
-
-    # Release
-    name = re.sub(
-        RELEASE_PATTERN,
-        " ",
-        name,
-        flags=re.I
-    )
-
-    # Source
-    name = re.sub(
-        SOURCE_PATTERN,
-        " ",
-        name,
-        flags=re.I
-    )
-
-    # Codec
-    name = re.sub(
-        CODEC_PATTERN,
-        " ",
-        name,
-        flags=re.I
-    )
-
-    # Audio
-    name = re.sub(
-        AUDIO_PATTERN,
-        " ",
-        name,
-        flags=re.I
-    )
-
-    # Language
-    for patterns in LANGUAGE_PATTERNS.values():
-
-        for pattern in patterns:
-
-            name = re.sub(
-                pattern,
-                " ",
-                name,
-                flags=re.I
-            )
-
-    # Remove year anywhere near the end
-    name = re.sub(
-        r"[\s._-]+"
-        r"(19\d{2}|20\d{2})"
-        r"[\s._-]*$",
-        " ",
-        name
-    )
-
-    # Replace separators
-    name = re.sub(
-        r"[._-]+",
-        " ",
-        name
-    )
-
-    # Remove remaining symbols
-    name = re.sub(
-        r"[^\w\s]",
-        " ",
-        name,
-        flags=re.UNICODE
-    )
-
-    # Normalize spaces
     name = re.sub(
         r"\s+",
         " ",
