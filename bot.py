@@ -808,24 +808,18 @@ async def index_command(
 
 @app.on_message()
 async def debug_all_messages(_, message):
-    print(
-        "========== TELEGRAM UPDATE =========="
-    )
-    print(
-        "Chat ID:",
-        message.chat.id if message.chat else None
-    )
-    print(
-        "User:",
-        message.from_user.id if message.from_user else None
-    )
-    print(
-        "Text:",
-        message.text
-    )
-    print(
-        "======================================"
-    )
+
+    print("================================")
+    print("TELEGRAM UPDATE RECEIVED")
+    print("Message ID:", message.id)
+
+    if message.from_user:
+        print("User ID:", message.from_user.id)
+
+    if message.text:
+        print("Text:", message.text)
+
+    print("================================")
     
 # =====================================================
 # MAIN
@@ -846,17 +840,27 @@ async def main():
 
     print("Web server started.")
 
-    async with app:
+    await app.start()
 
-        me = await app.get_me()
+    print("================================")
+    print("TELEGRAM BOT CONNECTED")
 
-        print("================================")
-        print("TELEGRAM BOT CONNECTED")
-        print(f"Bot ID: {me.id}")
-        print(f"Bot Username: @{me.username}")
-        print("================================")
+    me = await app.get_me()
+
+    print(f"Bot ID: {me.id}")
+    print(f"Bot Username: @{me.username}")
+
+    print("================================")
+    print("LISTENING FOR TELEGRAM UPDATES...")
+    print("================================")
+
+    try:
 
         await asyncio.Event().wait()
+
+    finally:
+
+        await app.stop()
 
 
 if __name__ == "__main__":
