@@ -791,17 +791,9 @@ async def main():
 
     print("Starting Aero Media Search Bot...")
 
-    # -----------------------------------------------
-    # MongoDB
-    # -----------------------------------------------
-
     await create_indexes()
 
     print("MongoDB indexes ready.")
-
-    # -----------------------------------------------
-    # Web server
-    # -----------------------------------------------
 
     threading.Thread(
         target=run_web,
@@ -809,22 +801,19 @@ async def main():
     ).start()
 
     print("Web server started.")
-    
-    # Start and stop Pyrogram in the SAME event loop
-    # -----------------------------------------------
 
     async with app:
 
-        print("Telegram bot started.")
+        me = await app.get_me()
 
-        # Keep bot alive forever
+        print("================================")
+        print("TELEGRAM BOT CONNECTED")
+        print(f"Bot ID: {me.id}")
+        print(f"Bot Username: @{me.username}")
+        print("================================")
+
         await asyncio.Event().wait()
 
 
-# =====================================================
-# RUN
-# =====================================================
-
 if __name__ == "__main__":
-
     asyncio.run(main())
