@@ -855,12 +855,29 @@ async def main():
     print("================================")
 
     try:
+        response = requests.get(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/getWebhookInfo",
+            timeout=10
+        )
+
+        print("========== WEBHOOK CHECK ==========")
+        print(response.json())
+        print("===================================")
+
+    except Exception as e:
+        print(
+            "[WEBHOOK CHECK ERROR]",
+            repr(e)
+        )
+
+    try:
 
         await asyncio.Event().wait()
 
     finally:
 
         await app.stop()
+
 
 
 if __name__ == "__main__":
