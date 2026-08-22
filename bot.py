@@ -1,6 +1,7 @@
 import asyncio
 import time
 import threading
+import requests
 from flask import Flask
 from pyrogram import (
     Client,
@@ -829,10 +830,11 @@ async def main():
 
     print("Starting Aero Media Search Bot...")
 
+    # MongoDB
     await create_indexes()
-
     print("MongoDB indexes ready.")
 
+    # Web server
     threading.Thread(
         target=run_web,
         daemon=True
@@ -840,6 +842,7 @@ async def main():
 
     print("Web server started.")
 
+    # Start Pyrogram
     await app.start()
 
     print("================================")
@@ -855,29 +858,21 @@ async def main():
     print("================================")
 
     try:
-        response = requests.get(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/getWebhookInfo",
-            timeout=10
-        )
 
-        print("========== WEBHOOK CHECK ==========")
-        print(response.json())
-        print("===================================")
-
-    except Exception as e:
-        print(
-            "[WEBHOOK CHECK ERROR]",
-            repr(e)
-        )
-
-    try:
-
+        # Keep process alive
         await asyncio.Event().wait()
+
+    except KeyboardInterrupt:
+
+        print("Stopping bot...")
 
     finally:
 
-        await app.stop()
+        if app.is_connected:
 
+            await app.stop()
+
+        print("Bot stopped.")
 
 
 if __name__ == "__main__":
