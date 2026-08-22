@@ -108,6 +108,32 @@ app = Client(
     in_memory=True
 )
 
+# =====================================================
+# CONNECTION TEST
+# =====================================================
+
+@app.on_message(filters.private & filters.command("ping"))
+async def ping_handler(_, message):
+
+    print(
+        "========== PING RECEIVED =========="
+    )
+
+    print(
+        "User ID:",
+        message.from_user.id
+    )
+
+    print(
+        "Message:",
+        message.text
+    )
+
+    await message.reply_text(
+        "🏓 <b>Pong!</b>\n\n"
+        "Telegram updates are working."
+    )
+
 
 # =====================================================
 # CACHE
