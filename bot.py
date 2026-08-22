@@ -789,26 +789,41 @@ async def index_command(
 
 async def main():
 
+    print("Starting Aero Media Search Bot...")
+
+    # -----------------------------------------------
+    # MongoDB
+    # -----------------------------------------------
+
     await create_indexes()
 
     print("MongoDB indexes ready.")
 
-    # Start web server
+    # -----------------------------------------------
+    # Web server
+    # -----------------------------------------------
+
     threading.Thread(
         target=run_web,
         daemon=True
     ).start()
 
     print("Web server started.")
+    
+    # Start and stop Pyrogram in the SAME event loop
+    # -----------------------------------------------
 
-    # Start Telegram bot
-    await app.start()
+    async with app:
 
-    print("Telegram bot started.")
+        print("Telegram bot started.")
 
-    # Keep the process alive
-    await asyncio.Event().wait()
+        # Keep bot alive forever
+        await asyncio.Event().wait()
 
+
+# =====================================================
+# RUN
+# =====================================================
 
 if __name__ == "__main__":
 
