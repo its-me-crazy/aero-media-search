@@ -1,8 +1,12 @@
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import UpdateOne
 from bson import ObjectId
+from bson.errors import InvalidId
 
-from config import MONGO_URI, DB_NAME
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from config import (
+    MONGO_URI,
+    DB_NAME
+)
 
 
 # =====================================================
@@ -13,7 +17,7 @@ mongo = AsyncIOMotorClient(
     MONGO_URI,
     serverSelectionTimeoutMS=10000,
     maxPoolSize=50,
-    minPoolSize=5,
+    minPoolSize=5
 )
 
 db = mongo[DB_NAME]
@@ -28,16 +32,12 @@ index_state = db.index_state
 
 async def create_indexes():
 
-    # Exact title / prefix search
+    # Exact title lookup
     await files.create_index(
-        [("title_key", 1)],
+        [
+            ("title_key", 1)
+        ],
         name="title_key"
-    )
-
-    # Multi-word token search
-    await files.create_index(
-        [("title_tokens", 1)],
-        name="title_tokens"
     )
 
     # Title + year
@@ -58,7 +58,7 @@ async def create_indexes():
         name="title_language"
     )
 
-    # Prevent duplicate Telegram messages
+    # Telegram duplicate protection
     await files.create_index(
         [
             ("chat_id", 1),
@@ -70,63 +70,53 @@ async def create_indexes():
 
     # Newest files
     await files.create_index(
-        [("created_at", -1)],
+        [
+            ("created_at", -1)
+        ],
         name="created_at"
     )
+
+    # MongoDB text search
+    try:
+
+        await files.create_index(
+            [
+                ("title", "text"),
+                ("filename", "text")
+            ],
+            name="title_text_search",
+            default_language="none"
+        )
+
+    except Exception as e:
+
+        print(
+            "[TEXT INDEX]",
+            repr(e)
+        )
 
     print("MongoDB indexes ready.")
 
 
 # =====================================================
-# SAVE ONE FILE
+# SAVE FILE
 # =====================================================
 
 async def save_file(data):
 
     await files.update_one(
+
         {
             "chat_id": data["chat_id"],
             "message_id": data["message_id"]
         },
+
         {
             "$set": data
         },
+
         upsert=True
     )
-
-
-# =====================================================
-# BULK SAVE FILES
-# =====================================================
-
-async def save_files_bulk(data_list):
-
-    if not data_list:
-        return
-
-    operations = []
-
-    for data in data_list:
-
-        operations.append(
-            UpdateOne(
-                {
-                    "chat_id": data["chat_id"],
-                    "message_id": data["message_id"]
-                },
-                {
-                    "$set": data
-                },
-                upsert=True
-            )
-        )
-
-    if operations:
-
-        await files.bulk_write(
-            operations,
-            ordered=False
-        )
 
 
 # =====================================================
@@ -135,35 +125,25 @@ async def save_files_bulk(data_list):
 
 async def get_file(file_id):
 
-    # Newer database IDs may be ObjectId strings.
-    if isinstance(file_id, str):
+    try:
 
-        try:
+        object_id = ObjectId(
+            str(file_id)
+        )
 
-            object_id = ObjectId(file_id)
+    except (InvalidId, TypeError):
 
-            item = await files.find_one(
-                {
-                    "_id": object_id
-                }
-            )
+        return None
 
-            if item:
-                return item
-
-        except Exception:
-            pass
-
-    # Fallback for databases using string IDs.
     return await files.find_one(
         {
-            "_id": file_id
+            "_id": object_id
         }
     )
 
 
 # =====================================================
-# COUNT FILES
+# COUNT
 # =====================================================
 
 async def count_files():
@@ -176,25 +156,20 @@ async def count_files():
 # =====================================================
 
 async def exact_search(
-    title_key,
-    limit=50
+    key,
+    limit
 ):
 
-    cursor = (
-        files
-        .find(
-            {
-                "title_key": title_key
-            }
-        )
-        .sort(
-            [
-                ("year", 1),
-                ("message_id", 1)
-            ]
-        )
-        .limit(limit)
-    )
+    cursor = files.find(
+        {
+            "title_key": key
+        }
+    ).sort(
+        [
+            ("year", 1),
+            ("message_id", 1)
+        ]
+    ).limit(limit)
 
     return await cursor.to_list(
         length=limit
@@ -206,34 +181,30 @@ async def exact_search(
 # =====================================================
 
 async def prefix_search(
-    title_key,
-    limit=50
+    key,
+    limit
 ):
+
+    # Escape regex so user input cannot
+    # become an expensive/invalid regex.
 
     import re
 
-    escaped = re.escape(
-        title_key
-    )
+    escaped = re.escape(key)
 
-    cursor = (
-        files
-        .find(
-            {
-                "title_key": {
-                    "$regex": "^" + escaped
-                }
+    cursor = files.find(
+        {
+            "title_key": {
+                "$regex": "^" + escaped
             }
-        )
-        .sort(
-            [
-                ("title_key", 1),
-                ("year", 1),
-                ("message_id", 1)
-            ]
-        )
-        .limit(limit)
-    )
+        }
+    ).sort(
+        [
+            ("title_key", 1),
+            ("year", 1),
+            ("message_id", 1)
+        ]
+    ).limit(limit)
 
     return await cursor.to_list(
         length=limit
@@ -241,68 +212,61 @@ async def prefix_search(
 
 
 # =====================================================
-# TOKEN SEARCH
+# TEXT SEARCH
 # =====================================================
 
-async def token_search(
-    tokens,
-    limit=100
+async def text_search(
+    query,
+    limit
 ):
 
-    if not tokens:
+    if not query:
         return []
 
-    cursor = (
-        files
-        .find(
+    try:
+
+        cursor = files.find(
             {
-                "title_tokens": {
-                    "$all": tokens
+                "$text": {
+                    "$search": query
+                }
+            },
+            {
+                "score": {
+                    "$meta": "textScore"
                 }
             }
+        ).sort(
+            [
+                (
+                    "score",
+                    {
+                        "$meta": "textScore"
+                    }
+                ),
+                (
+                    "year",
+                    1
+                )
+            ]
+        ).limit(limit)
+
+        return await cursor.to_list(
+            length=limit
         )
-        .limit(limit)
-    )
 
-    return await cursor.to_list(
-        length=limit
-    )
+    except Exception as e:
 
-
-# =====================================================
-# CONTAINS SEARCH
-# =====================================================
-
-async def contains_search(
-    title_key,
-    limit=100
-):
-
-    import re
-
-    escaped = re.escape(
-        title_key
-    )
-
-    cursor = (
-        files
-        .find(
-            {
-                "title_key": {
-                    "$regex": escaped
-                }
-            }
+        print(
+            "[TEXT SEARCH ERROR]",
+            repr(e)
         )
-        .limit(limit)
-    )
 
-    return await cursor.to_list(
-        length=limit
-    )
+        return []
 
 
 # =====================================================
-# INDEX CHECKPOINT
+# INDEX STATE
 # =====================================================
 
 async def get_index_state():
@@ -328,7 +292,7 @@ async def get_index_state():
 
 
 # =====================================================
-# UPDATE INDEX CHECKPOINT
+# UPDATE INDEX STATE
 # =====================================================
 
 async def update_index_state(
@@ -341,7 +305,8 @@ async def update_index_state(
 ):
 
     update = {
-        "last_message_id": last_message_id
+        "last_message_id":
+            last_message_id
     }
 
     if processed is not None:
@@ -360,12 +325,15 @@ async def update_index_state(
         update["completed"] = completed
 
     await index_state.update_one(
+
         {
             "_id": "database_channel"
         },
+
         {
             "$set": update
         },
+
         upsert=True
     )
 
@@ -377,9 +345,11 @@ async def update_index_state(
 async def reset_index_state():
 
     await index_state.update_one(
+
         {
             "_id": "database_channel"
         },
+
         {
             "$set": {
                 "last_message_id": 0,
@@ -390,5 +360,6 @@ async def reset_index_state():
                 "completed": False
             }
         },
+
         upsert=True
     )
