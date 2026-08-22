@@ -1,12 +1,14 @@
+import asyncio
 from datetime import datetime, timezone
 
-from pymongo import UpdateOne
 from pyrogram import filters
 
-from config import DATABASE_CHANNEL_ID
+from config import (
+    DATABASE_CHANNEL_ID,
+    INDEX_CHECKPOINT_EVERY
+)
 
 from database import (
-    files,
     save_file,
     get_index_state,
     update_index_state
@@ -16,7 +18,6 @@ from utils import (
     get_filename,
     extract_title,
     title_key,
-    title_tokens,
     extract_year,
     detect_language,
     extract_quality,
@@ -25,20 +26,13 @@ from utils import (
 
 
 # =====================================================
-# SETTINGS
+# INDEX ONE MESSAGE
 # =====================================================
 
-BATCH_SIZE = 100
-
-
-# =====================================================
-# BUILD DOCUMENT
-# =====================================================
-
-def build_file_data(message):
+async def index_message(message):
 
     if not is_media(message):
-        return None
+        return False
 
     filename = get_filename(
         message
@@ -49,14 +43,34 @@ def build_file_data(message):
     )
 
     if not title:
-        return None
+        return False
 
     key = title_key(
         title
     )
 
     if not key:
-        return None
+        return False
+
+    if message.video:
+
+        media_type = "video"
+
+    elif message.document:
+
+        media_type = "document"
+
+    elif message.audio:
+
+        media_type = "audio"
+
+    elif message.animation:
+
+        media_type = "animation"
+
+    else:
+
+        return False
 
     data = {
 
@@ -75,9 +89,6 @@ def build_file_data(message):
         "title_key":
             key,
 
-        "title_tokens":
-            title_tokens(title),
-
         "year":
             extract_year(filename),
 
@@ -91,41 +102,12 @@ def build_file_data(message):
             message.caption or "",
 
         "media_type":
-            (
-                "video"
-                if message.video
-                else
-                "document"
-                if message.document
-                else
-                "audio"
-                if message.audio
-                else
-                "animation"
-            ),
+            media_type,
 
         "created_at":
-            (
-                message.date
-                or datetime.now(timezone.utc)
-            )
+            message.date
+            or datetime.now(timezone.utc)
     }
-
-    return data
-
-
-# =====================================================
-# INDEX ONE MESSAGE
-# =====================================================
-
-async def index_message(message):
-
-    data = build_file_data(
-        message
-    )
-
-    if not data:
-        return False
 
     await save_file(
         data
@@ -135,113 +117,7 @@ async def index_message(message):
 
 
 # =====================================================
-# BULK INDEX
-# =====================================================
-
-async def bulk_index(
-    messages
-):
-
-    if not messages:
-        return 0, 0
-
-    operations = []
-
-    indexed = 0
-    skipped = 0
-
-    for message in messages:
-
-        try:
-
-            data = build_file_data(
-                message
-            )
-
-            if not data:
-
-                skipped += 1
-
-                continue
-
-            operations.append(
-                UpdateOne(
-                    {
-                        "chat_id":
-                            data["chat_id"],
-
-                        "message_id":
-                            data["message_id"]
-                    },
-                    {
-                        "$set":
-                            data
-                    },
-                    upsert=True
-                )
-            )
-
-            indexed += 1
-
-        except Exception as e:
-
-            skipped += 1
-
-            print(
-                "[BUILD ERROR]",
-                getattr(
-                    message,
-                    "id",
-                    "unknown"
-                ),
-                repr(e)
-            )
-
-    if operations:
-
-        try:
-
-            await files.bulk_write(
-                operations,
-                ordered=False
-            )
-
-        except Exception as e:
-
-            print(
-                "[BULK WRITE ERROR]",
-                repr(e)
-            )
-
-            # Fallback to individual writes.
-            successful = 0
-
-            for operation in operations:
-
-                try:
-
-                    await files.update_one(
-                        operation._filter,
-                        operation._doc,
-                        upsert=True
-                    )
-
-                    successful += 1
-
-                except Exception as single_error:
-
-                    print(
-                        "[SINGLE WRITE ERROR]",
-                        repr(single_error)
-                    )
-
-            indexed = successful
-
-    return indexed, skipped
-
-
-# =====================================================
-# INDEX EXISTING DATABASE CHANNEL
+# INDEX EXISTING CHANNEL
 # =====================================================
 
 async def index_existing_channel(
@@ -251,42 +127,41 @@ async def index_existing_channel(
 
     state = await get_index_state()
 
-    last_message_id = state.get(
-        "last_message_id",
-        0
+    last_message_id = int(
+        state.get(
+            "last_message_id",
+            0
+        )
     )
 
-    processed = state.get(
-        "processed",
-        0
+    processed = int(
+        state.get(
+            "processed",
+            0
+        )
     )
 
-    indexed = state.get(
-        "indexed",
-        0
+    indexed = int(
+        state.get(
+            "indexed",
+            0
+        )
     )
 
-    skipped = state.get(
-        "skipped",
-        0
+    skipped = int(
+        state.get(
+            "skipped",
+            0
+        )
     )
 
-    print(
-        "================================"
-    )
-
-    print(
-        "DATABASE INDEXING STARTED"
-    )
-
+    print("================================")
+    print("DATABASE INDEXING STARTED")
     print(
         f"Starting from message ID: "
         f"{last_message_id}"
     )
-
-    print(
-        "================================"
-    )
+    print("================================")
 
     await update_index_state(
         last_message_id,
@@ -297,8 +172,6 @@ async def index_existing_channel(
         False
     )
 
-    batch = []
-
     try:
 
         async for message in app.get_chat_history(
@@ -306,54 +179,64 @@ async def index_existing_channel(
             offset_id=last_message_id
         ):
 
-            # -----------------------------------------
-            # Skip checkpoint message
-            # -----------------------------------------
-
             if (
                 last_message_id
                 and message.id == last_message_id
             ):
                 continue
 
-            batch.append(
-                message
-            )
-
             processed += 1
 
-            # -----------------------------------------
-            # PROCESS BATCH
-            # -----------------------------------------
+            try:
 
-            if len(batch) >= BATCH_SIZE:
-
-                batch_indexed, batch_skipped = (
-                    await bulk_index(batch)
+                success = await index_message(
+                    message
                 )
 
-                indexed += batch_indexed
+                if success:
+                    indexed += 1
+                else:
+                    skipped += 1
 
-                skipped += batch_skipped
+            except Exception as e:
 
-                last_message_id = batch[-1].id
+                skipped += 1
 
-                batch.clear()
+                print(
+                    "[INDEX ERROR]",
+                    message.id,
+                    repr(e)
+                )
 
-                # -------------------------------------
-                # CHECKPOINT
-                # -------------------------------------
+            last_message_id = message.id
+
+            # -----------------------------------------
+            # CHECKPOINT
+            # -----------------------------------------
+
+            if (
+                processed
+                % INDEX_CHECKPOINT_EVERY
+                == 0
+            ):
 
                 await update_index_state(
+
                     last_message_id,
+
                     processed,
+
                     indexed,
+
                     skipped,
+
                     True,
+
                     False
                 )
 
                 text = (
+
                     "📚 <b>Database Indexing...</b>\n\n"
 
                     f"📦 Processed: "
@@ -366,7 +249,7 @@ async def index_existing_channel(
                     f"{skipped:,}\n\n"
 
                     f"🆔 Message ID: "
-                    f"{last_message_id}"
+                    f"{message.id}"
                 )
 
                 print(
@@ -381,54 +264,35 @@ async def index_existing_channel(
                             text
                         )
 
-                    except Exception as e:
+                    except Exception:
+                        pass
 
-                        print(
-                            "[STATUS ERROR]",
-                            repr(e)
-                        )
-
-        # =================================================
-        # PROCESS REMAINING MESSAGES
-        # =================================================
-
-        if batch:
-
-            batch_indexed, batch_skipped = (
-                await bulk_index(batch)
+            # Small yield
+            await asyncio.sleep(
+                0.01
             )
 
-            indexed += batch_indexed
-
-            skipped += batch_skipped
-
-            last_message_id = batch[-1].id
-
-            batch.clear()
-
-            await update_index_state(
-                last_message_id,
-                processed,
-                indexed,
-                skipped,
-                True,
-                False
-            )
-
-        # =================================================
-        # COMPLETED
-        # =================================================
+        # ---------------------------------------------
+        # FINAL CHECKPOINT
+        # ---------------------------------------------
 
         await update_index_state(
+
             last_message_id,
+
             processed,
+
             indexed,
+
             skipped,
+
             False,
+
             True
         )
 
         text = (
+
             "✅ <b>Indexing Completed!</b>\n\n"
 
             f"📦 Processed: "
@@ -453,12 +317,8 @@ async def index_existing_channel(
                     text
                 )
 
-            except Exception as e:
-
-                print(
-                    "[STATUS ERROR]",
-                    repr(e)
-                )
+            except Exception:
+                pass
 
         return {
             "processed": processed,
@@ -468,16 +328,18 @@ async def index_existing_channel(
 
     except Exception as e:
 
-        # =================================================
-        # ERROR / STOPPED
-        # =================================================
-
         await update_index_state(
+
             last_message_id,
+
             processed,
+
             indexed,
+
             skipped,
+
             False,
+
             False
         )
 
@@ -508,12 +370,8 @@ async def index_existing_channel(
                     "Run <code>/index</code> again."
                 )
 
-            except Exception as callback_error:
-
-                print(
-                    "[CALLBACK ERROR]",
-                    repr(callback_error)
-                )
+            except Exception:
+                pass
 
         return None
 
@@ -537,9 +395,11 @@ def register_indexer(app):
 
         try:
 
-            if await index_message(
+            success = await index_message(
                 message
-            ):
+            )
+
+            if success:
 
                 print(
                     "[NEW FILE INDEXED]",
@@ -550,5 +410,6 @@ def register_indexer(app):
 
             print(
                 "[NEW FILE INDEX ERROR]",
+                message.id,
                 repr(e)
             )
