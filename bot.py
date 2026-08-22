@@ -1,8 +1,9 @@
 import asyncio
 import time
 import threading
-import requests
+
 from flask import Flask
+
 from pyrogram import (
     Client,
     filters
@@ -49,8 +50,14 @@ from search import (
     search_movies
 )
 
-from utils import title_key
+from utils import (
+    title_key
+)
 
+
+# =====================================================
+# CONFIG
+# =====================================================
 
 validate_config()
 
@@ -99,38 +106,17 @@ def run_web():
 app = Client(
 
     "aero_media_search",
+
     api_id=API_ID,
+
     api_hash=API_HASH,
+
     bot_token=BOT_TOKEN,
+
     in_memory=True,
+
     workers=4
 )
-
-# =====================================================
-# CONNECTION TEST
-# =====================================================
-
-@app.on_message(filters.private & filters.command("ping"))
-async def ping_handler(_, message):
-
-    print(
-        "========== PING RECEIVED =========="
-    )
-
-    print(
-        "User ID:",
-        message.from_user.id
-    )
-
-    print(
-        "Message:",
-        message.text
-    )
-
-    await message.reply_text(
-        "🏓 <b>Pong!</b>\n\n"
-        "Telegram updates are working."
-    )
 
 
 # =====================================================
@@ -176,10 +162,36 @@ def put_cache(
         query
     ] = {
 
-        "results": results,
+        "results":
+            results,
 
-        "time": time.time()
+        "time":
+            time.time()
     }
+
+
+# =====================================================
+# PING
+# =====================================================
+
+@app.on_message(
+    filters.private
+    & filters.command("ping")
+)
+async def ping_handler(
+    _,
+    message
+):
+
+    print(
+        "[PING]",
+        message.from_user.id
+    )
+
+    await message.reply_text(
+        "🏓 <b>Pong!</b>\n\n"
+        "Telegram updates are working."
+    )
 
 
 # =====================================================
@@ -195,7 +207,11 @@ async def start_handler(
     message
 ):
 
-    args = message.command[1:]
+    args = (
+        message.command[1:]
+        if message.command
+        else []
+    )
 
     # -----------------------------------------------
     # FILE DEEP LINK
@@ -273,7 +289,7 @@ async def group_search(
         await message.reply_text(
 
             "🔎 <b>Usage:</b>\n"
-            "<code>/search Avengers Endgame</code>"
+            "<code>/search Avengers</code>"
         )
 
         return
@@ -299,7 +315,8 @@ async def group_search(
         [
             "start",
             "index",
-            "stats"
+            "stats",
+            "ping"
         ]
     )
 )
@@ -308,7 +325,9 @@ async def private_search(
     message
 ):
 
-    query = message.text.strip()
+    query = (
+        message.text or ""
+    ).strip()
 
     if len(query) < 2:
         return
@@ -331,6 +350,14 @@ async def show_results(
     key = title_key(
         query
     )
+
+    if not key:
+
+        await message.reply_text(
+            "❌ Invalid search."
+        )
+
+        return
 
     results = get_cache(
         key
@@ -359,10 +386,6 @@ async def show_results(
         )
 
         return
-
-    # -----------------------------------------------
-    # GROUP BY TITLE
-    # -----------------------------------------------
 
     first = results[0]
 
@@ -467,10 +490,6 @@ async def show_results(
                 f" • {quality}"
             )
 
-        # -------------------------------------------
-        # DEEP LINK
-        # -------------------------------------------
-
         link = (
 
             f"https://t.me/"
@@ -540,29 +559,34 @@ async def deliver_file(
 
         return
 
-    message_id = item[
+    message_id = item.get(
         "message_id"
-    ]
+    )
+
+    chat_id = item.get(
+        "chat_id",
+        DATABASE_CHANNEL_ID
+    )
+
+    if not message_id:
+
+        await app.send_message(
+            user_id,
+            "❌ Invalid database file."
+        )
+
+        return
 
     try:
-
-        # -------------------------------------------
-        # COPY ORIGINAL TELEGRAM MESSAGE
-        # -------------------------------------------
 
         sent = await app.copy_message(
 
             chat_id=user_id,
 
-            from_chat_id=
-            DATABASE_CHANNEL_ID,
+            from_chat_id=chat_id,
 
             message_id=message_id
         )
-
-        # -------------------------------------------
-        # UPDATES BUTTON
-        # -------------------------------------------
 
         info = await app.send_message(
 
@@ -591,16 +615,10 @@ async def deliver_file(
             ])
         )
 
-        # -------------------------------------------
-        # DELETE AFTER 5 MINUTES
-        # -------------------------------------------
-
         asyncio.create_task(
 
             delete_after(
-
                 user_id,
-
                 sent.id
             )
         )
@@ -608,9 +626,7 @@ async def deliver_file(
         asyncio.create_task(
 
             delete_after(
-
                 user_id,
-
                 info.id
             )
         )
@@ -618,14 +634,14 @@ async def deliver_file(
     except UserIsBlocked:
 
         print(
-            "User blocked bot:",
+            "[DELIVERY] User blocked bot:",
             user_id
         )
 
     except PeerIdInvalid:
 
         print(
-            "Invalid user:",
+            "[DELIVERY] Invalid user:",
             user_id
         )
 
@@ -699,15 +715,7 @@ async def stats(
 
 
 # =====================================================
-# REGISTER DATABASE LISTENER
-# =====================================================
-
-register_indexer(
-    app
-)
-
-# =====================================================
-# INDEX EXISTING DATABASE
+# INDEX COMMAND
 # =====================================================
 
 INDEX_RUNNING = False
@@ -728,8 +736,7 @@ async def index_command(
     if INDEX_RUNNING:
 
         await message.reply_text(
-            "⚠️ <b>Indexing is already running.</b>\n\n"
-            "Please wait for it to finish."
+            "⚠️ <b>Indexing is already running.</b>"
         )
 
         return
@@ -740,12 +747,12 @@ async def index_command(
 
         "📚 <b>Database indexing started...</b>\n\n"
 
-        "This will scan your private database channel.\n\n"
-
         "⏳ Please wait..."
     )
 
-    async def update_status(text):
+    async def update_status(
+        text
+    ):
 
         try:
 
@@ -796,10 +803,7 @@ async def index_command(
 
             "❌ <b>Indexing failed.</b>\n\n"
 
-            f"<code>{e}</code>\n\n"
-
-            "Run <code>/index</code> again "
-            "to continue from the saved checkpoint."
+            f"<code>{str(e)[:3000]}</code>"
         )
 
     finally:
@@ -807,64 +811,79 @@ async def index_command(
         INDEX_RUNNING = False
 
 
-@app.on_message()
-async def debug_all_messages(_, message):
+# =====================================================
+# DATABASE CHANNEL LISTENER
+# =====================================================
 
-    print("================================")
-    print("TELEGRAM UPDATE RECEIVED")
-    print("Message ID:", message.id)
+register_indexer(
+    app
+)
 
-    if message.from_user:
-        print("User ID:", message.from_user.id)
 
-    if message.text:
-        print("Text:", message.text)
-
-    print("================================")
-    
 # =====================================================
 # MAIN
 # =====================================================
 
 async def main():
 
-    print("Starting Aero Media Search Bot...")
+    print(
+        "Starting Aero Media Search Bot..."
+    )
 
-    # MongoDB
     await create_indexes()
-    print("MongoDB indexes ready.")
 
-    # Web server
+    print(
+        "MongoDB indexes ready."
+    )
+
     threading.Thread(
         target=run_web,
         daemon=True
     ).start()
 
-    print("Web server started.")
+    print(
+        "Web server started."
+    )
 
-    # Start Pyrogram
+    print(
+        "Starting Telegram client..."
+    )
+
     await app.start()
-
-    print("================================")
-    print("TELEGRAM BOT CONNECTED")
 
     me = await app.get_me()
 
-    print(f"Bot ID: {me.id}")
-    print(f"Bot Username: @{me.username}")
+    print(
+        "================================"
+    )
 
-    print("================================")
-    print("LISTENING FOR TELEGRAM UPDATES...")
-    print("================================")
+    print(
+        "TELEGRAM BOT CONNECTED"
+    )
+
+    print(
+        f"Bot ID: {me.id}"
+    )
+
+    print(
+        f"Bot Username: @{me.username}"
+    )
+
+    print(
+        "================================"
+    )
+
+    print(
+        "LISTENING FOR TELEGRAM UPDATES..."
+    )
+
+    print(
+        "================================"
+    )
 
     try:
 
-        # Keep process alive
         await asyncio.Event().wait()
-
-    except KeyboardInterrupt:
-
-        print("Stopping bot...")
 
     finally:
 
@@ -872,8 +891,13 @@ async def main():
 
             await app.stop()
 
-        print("Bot stopped.")
+        print(
+            "Telegram client stopped."
+        )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+
+    asyncio.run(
+        main()
+    )
